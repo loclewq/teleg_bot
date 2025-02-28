@@ -1,7 +1,8 @@
-import requests
-from bs4 import BeautifulSoup
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import requests
+from bs4 import BeautifulSoup
 
 
 def getnews():
@@ -10,26 +11,15 @@ def getnews():
     soup = BeautifulSoup(r.text, 'html.parser')
     titles = soup.find_all('h3', class_='font-semibold block')
 
-    # Chỉ lấy 10 tiêu đề đầu tiên
     for i, title in enumerate(titles[:10], 1):
         try:
-            # Tìm thẻ a bên trong h3
             a_tag = title.find('a')
-
             if a_tag:
-                # Lấy nội dung text của thẻ a (tiêu đề)
                 title_text = a_tag.get_text(strip=True)
-
-                # Lấy URL từ thuộc tính href của thẻ a
                 link = a_tag.get('href')
-
-                # Thêm domain vào URL tương đối để tạo URL đầy đủ
                 base_url = "https://baomoi.com"
                 full_link = base_url + link
-
-                #tieude.append(f"{i}. {title_text}")
                 tieude.append(f"{i}. {full_link}")
-                #tieude.append("-" * 50)
             else:
                 print(f"{i}. Không tìm thấy thẻ a trong tiêu đề.")
         except Exception as e:
@@ -48,7 +38,10 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f'{x}')
 
 
-app = ApplicationBuilder().token("8180575813:AAHlZg9ECm-bopEKE7_AzycPy-cJXXOtu_w").build()
+# Lấy token từ biến môi trường
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+
+app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("hello", hello))
 app.add_handler(CommandHandler("news", news))
