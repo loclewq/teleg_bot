@@ -4,53 +4,41 @@ from bs4 import BeautifulSoup
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
-# -------------------- Get News from BaoMoi --------------------
-async def getnews_baomoi():
+def getnews_baomoi():
     news = []
-    try:
-        r = requests.get('https://baomoi.com/tag/LITE.epi')
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, 'html.parser')
-        titles = soup.find_all('h3', class_='font-semibold block')
-        for title in titles:
-            a_tag = title.find('a')
-            if a_tag:
-                link = a_tag.get('href')
-                if link:
-                    full_link = "https://baomoi.com" + link
-                    news.append(full_link)
-    except Exception as e:
-        print(f"Lỗi khi lấy tin từ BaoMoi: {e}")
+    r = requests.get('https://baomoi.com/tag/LITE.epi')
+    soup = BeautifulSoup(r.text, 'html.parser')
+    titles = soup.find_all('h3', class_='font-semibold block')
+    for title in titles:
+        a_tag = title.find('a')
+        if a_tag:
+            link = a_tag.get('href')
+            if link:
+                full_link = "https://baomoi.com" + link
+                news.append(full_link)
     return news
 
-# -------------------- Get News from NguoiQuanSat --------------------
-async def getnews_nguoiquansat(key):
+def getnews_nguoiquansat(key):
     base_url = 'https://nguoiquansat.vn/'
     full_url = f"{base_url}{key}"
+
+    r = requests.get(full_url)
+    soup = BeautifulSoup(r.text, 'html.parser')
+    h2_titles = soup.find_all('h2', class_='b-grid__title')
+    h3_titles = soup.find_all('h3', class_='b-grid__title')
+
     unique_links = set()
-
-    try:
-        r = requests.get(full_url)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, 'html.parser')
-        h2_titles = soup.find_all('h2', class_='b-grid__title')
-        h3_titles = soup.find_all('h3', class_='b-grid__title')
-
-        for tag in h2_titles + h3_titles:
-            a_tag = tag.find('a')
-            if a_tag:
-                link = a_tag.get('href')
-                if link:
-                    unique_links.add(link.strip())
-    except Exception as e:
-        print(f"Lỗi khi lấy tin từ NguoiQuanSat: {e}")
+    for tag in h2_titles + h3_titles:
+        a_tag = tag.find('a')
+        if a_tag:
+            link = a_tag.get('href')
+            if link:
+                unique_links.add(link.strip())
     return list(unique_links)
 
-# -------------------- Command: Hello --------------------
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'Xin chào {update.effective_user.first_name}')
 
-# -------------------- Show News Categories --------------------
 async def show_news_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
         [InlineKeyboardButton("Tin mới", callback_data='getnews')],
@@ -65,9 +53,12 @@ async def show_news_categories(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("Xã hội", callback_data='xa-hoi')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Chọn một chủ đề:', reply_markup=reply_markup)
 
-# -------------------- Handle Category Selection --------------------
+    if update.message:
+        await update.message.reply_text('Chọn một chủ đề:', reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.reply_text('Chọn một chủ đề:', reply_markup=reply_markup)
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -84,7 +75,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text="Bạn muốn hiển thị bao nhiêu tin tức?", reply_markup=reply_markup)
 
-# -------------------- Select Number of Articles --------------------
 async def select_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -94,17 +84,13 @@ async def select_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     offset = context.user_data.get('offset', 0)
 
     if category == 'getnews':
-        news_list = await getnews_baomoi()
+        news_list = getnews_baomoi()
     else:
-        news_list = await getnews_nguoiquansat(category)
-
-    if not news_list:
-        await query.message.reply_text("Không tìm thấy tin tức nào.")
-        return
+        news_list = getnews_nguoiquansat(category)
 
     end = offset + num_articles
     for i, news in enumerate(news_list[offset:end], offset + 1):
-        await context.bot.send_message(chat_id=query.message.chat.id, text=f"{i}. {news}")
+        await context.bot.send_message(chat_id=query.message.chat_id, text=f"{i}. {news}")
 
     context.user_data['offset'] = end
 
@@ -113,9 +99,8 @@ async def select_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [InlineKeyboardButton("Chọn danh mục khác", callback_data='new_category')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=query.message.chat.id, text="Bạn muốn làm gì tiếp theo?", reply_markup=reply_markup)
+    await context.bot.send_message(chat_id=query.message.chat_id, text="Bạn muốn làm gì tiếp theo?", reply_markup=reply_markup)
 
-# -------------------- Continue or Choose New Category --------------------
 async def continue_or_new_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -126,13 +111,13 @@ async def continue_or_new_category(update: Update, context: ContextTypes.DEFAULT
         offset = context.user_data.get('offset', 0)
 
         if category == 'getnews':
-            news_list = await getnews_baomoi()
+            news_list = getnews_baomoi()
         else:
-            news_list = await getnews_nguoiquansat(category)
+            news_list = getnews_nguoiquansat(category)
 
         end = offset + num_articles
         for i, news in enumerate(news_list[offset:end], offset + 1):
-            await context.bot.send_message(chat_id=query.message.chat.id, text=f"{i}. {news}")
+            await context.bot.send_message(chat_id=query.message.chat_id, text=f"{i}. {news}")
 
         context.user_data['offset'] = end
 
@@ -141,13 +126,14 @@ async def continue_or_new_category(update: Update, context: ContextTypes.DEFAULT
             [InlineKeyboardButton("Chọn danh mục khác", callback_data='new_category')],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(chat_id=query.message.chat.id, text="Bạn muốn làm gì tiếp theo?", reply_markup=reply_markup)
+        await context.bot.send_message(chat_id=query.message.chat_id, text="Bạn muốn làm gì tiếp theo?", reply_markup=reply_markup)
 
     elif query.data == 'new_category':
         await show_news_categories(update, context)
 
-# -------------------- Run Telegram Bot --------------------
-TOKEN = os.getenv('TELEGRAM_TOKEN')  # Sử dụng biến môi trường để lưu token
+# Lấy token từ biến môi trường
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("hello", hello))
